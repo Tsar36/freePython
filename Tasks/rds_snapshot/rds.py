@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 import boto3
 import click
 
-from .logger import Logger
+from logger import Logger
 
 if TYPE_CHECKING:
     from mypy_boto3_rds import RDSClient
@@ -126,4 +126,5 @@ class RDS:
                 raise RDSException(f"The snapshot {identifier} has timeouted to be stable")
 
 
-class RDSException(Exception): pass
+class RDSException(Exception):
+    pass
