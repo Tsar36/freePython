@@ -14,70 +14,108 @@ from concurrent.futures import ProcessPoolExecutor
 
 
 class PSQL:
+    def __init__(self, host, password):
+        # Инициализация параметров подключения к базе данных
+        self.host = host
+        self.password = password
 
-    async def anonymize_table(self, table_name: str):
+    async def anonymize_table(self, table_name: str, db_name: str):
+        # Асинхронное подключение к базе данных
         conn = await asyncpg.connect(
             user='your_user',
-            password='your_password',
-            database='your_database',
-            host='your_host',
+            password=self.password,
+            database=db_name,
+            host=self.host,
             port='your_port'
         )
-        logging.info(f"Running `anon.anonymize_table()` on {table_name}")
+        # Логирование запуска анонимизации таблицы
+        logging.info(f"Running `anon.anonymize_table()` on {table_name} in {db_name}")
+        # Выполнение SQL-запроса для анонимизации таблицы
         result = await conn.fetchval('SELECT anon.anonymize_table($1)', table_name)
+        # Закрытие соединения с базой данных
         await conn.close()
+        # Возвращение результата выполнения запроса
         return result
 
-    async def anonymize_db(self, tables: list):
+    async def anonymize_tables(self, table_info: list):
+        # Получение текущего асинхронного цикла событий
         loop = asyncio.get_running_loop()
+        # Создание пула процессов с максимальным числом рабочих процессов, равным 4
         with ProcessPoolExecutor(max_workers=4) as executor:
+            # Создание задач для анонимизации таблиц в пуле процессов
             futures = [
-                loop.run_in_executor(executor, self.anonymize_table, table)
-                for table in tables
+                loop.run_in_executor(executor, self.anonymize_table, table, db)
+                for db, table in table_info
             ]
+            # Ожидание завершения всех задач и сбор их результатов
             results = await asyncio.gather(*futures)
+        # Возвращение списка результатов
         return results
 
+    def get_dbs(self):
+        # Метод для получения списка баз данных (реализация требуется)
+        pass
 
-# Example usage
-async def main():
-    psql = PSQL()
+    def get_db_cursor(self, db):
+        # Метод для получения курсора базы данных (реализация требуется)
+        pass
 
-    transactions_service_tables = [
-        'table1', 'table2', 'table3', 'table4',
-        'table5', 'table6', 'table7', 'table8',
-        'table9', 'table10'
-    ]
+    def install_anonymizer(self, db, cursor):
+        # Метод для установки анонимизатора в базе данных (реализация требуется)
+        pass
 
-    ml_service_tables = ['ml_table1']
+    async def anonymize_database(self, host):
+        # Создание экземпляра PSQL с параметрами подключения
+        psql = PSQL(host, self.aws_secrets.get_secret_value(SecretId='db-pass-prod')['SecretString'])
+        # Получение списка баз данных
+        databases = psql.get_dbs()
 
-    all_tables = transactions_service_tables + ml_service_tables
+        # Список для хранения информации о таблицах
+        table_info = []
+        for db in databases:
+            # Получение курсора для базы данных
+            with psql.get_db_cursor(db) as cursor:
+                # Установка анонимизатора в базе данных
+                psql.install_anonymizer(db, cursor)
 
-    results = await psql.anonymize_db(all_tables)
+                # Получение списка таблиц для текущей базы данных
+                tables = get_tables_for_db(db)
+                for table in tables:
+                    # Добавление информации о таблицах в список
+                    table_info.append((db, table))
 
-    for table, result in zip(all_tables, results):
-        logging.info(f'Table: {table}, Result: {result}')
+        # Анонимизация таблиц параллельно, используя 4 процесса
+        await psql.anonymize_tables(table_info)
 
 
-# Run the async function
-asyncio.run(main())
+# Функция для получения списка таблиц в базе данных (реализация требуется)
+def get_tables_for_db(db):
+    pass
 
 
-'''
-Explanation:
+# Запуск асинхронной функции
+asyncio.run(anonymize_database(self, 'your_host'))
 
-	1.	Anonymize Table Function:
-	•	The anonymize_table function is modified to create and close a connection for each table anonymization task.
-	2.	Parallel Execution with ProcessPoolExecutor:
-	•	concurrent.futures.ProcessPoolExecutor is used to run the anonymization tasks in parallel. The max_workers=4 parameter ensures that no more than 4 tasks are run simultaneously.
-	•	loop.run_in_executor is used to submit each task to the executor. This method runs the function in a separate process.
-	3.	Main Function:
-	•	The main function prepares the list of tables to be anonymized and calls the anonymize_db function.
-	•	Results are logged for each table after the anonymization process is complete.
+def get_tables_for_db(db):
+    # Implement the method to get table names for the given database
+    pass
 
-Running the Code:
 
-Replace the database connection parameters (your_user, your_password, your_database, your_host, and your_port) with your actual database details.
+async def anonymize_database(self, host):
+    psql = PSQL(host, self.aws_secrets.get_secret_value(SecretId='db-pass-prod')['SecretString'])
+    databases = psql.get_dbs()
 
-This approach ensures that up to 4 anonymization tasks are run in parallel, making efficient use of CPU resources.
-'''
+    table_info = []
+    for db in databases:
+        with psql.get_db_cursor(db) as cursor:
+            psql.install_anonymizer(db, cursor)
+
+            tables = get_tables_for_db(db)
+            for table in tables:
+                table_info.append((db, table))
+
+    await psql.anonymize_tables(table_info)
+
+
+# To run the async function
+asyncio.run(anonymize_database(self, 'your_host'))
